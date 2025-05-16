@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Generate a random delay between the specified min and max
 DELAY=$(( {{ sleep_time_min }} + RANDOM % ({{ sleep_time_max }} - {{ sleep_time_min }} + 1) ))
 echo "Starting application in $DELAY seconds..."
 sleep $DELAY
@@ -9,5 +8,5 @@ sleep $DELAY
 cd /app
 
 # Start the Puma server
-echo "Starting Puma server..."
-exec bundle exec puma -C puma.rb
+echo "Starting Puma server on port {{ app_port }}..."
+exec bundle exec puma -C puma.rb -p {{ app_port }}
