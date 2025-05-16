@@ -1,0 +1,79 @@
+name: Deploy Version 2.x.x
+
+on:
+  push:
+    tags:
+      - 'v2.*'
+
+env:
+  AWS_REGION: "us-east-1"
+  S3_BUCKET: "terraform-state-bucket"
+  ANSIBLE_DIR: "ansible"
+  TERRAFORM_DIR: "terraform"
+  APP_NAME: "sinatra-app"
+  DEPLOY_GROUP_NAME: "sinatra-deploy-group"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+  terraform:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - run: terraform init -backend-config="bucket=${{ env.S3_BUCKET }}" -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - run: terraform apply -auto-approve
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+  ansible:
+    runs-on: ubuntu-latest
+    needs: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: |
+          sudo apt update
+          sudo apt install -y ansible
+
+      - run: ansible-playbook -i inventory main.yml
+        working-directory: ${{ env.ANSIBLE_DIR }}
+
+  canary_deploy:
+    runs-on: ubuntu-latest
+    needs: ansible
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Version 2 Canary
+        run: |
+          aws deploy create-deployment \
+            --application-name ${{ env.APP_NAME }} \
+            --deployment-group-name ${{ env.DEPLOY_GROUP_NAME }} \
+            --deployment-config-name CodeDeployDefault.OneAtATime \
+            --s3-location bucket=${{ env.S3_BUCKET }},bundleType=zip,key=deploy.zip
+
+      - name: Verify Deployment Health
+        run: |
+          curl -f http://your-app-url/health || exit 1
+
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          ansible-playbook -i inventory rollback.yml
