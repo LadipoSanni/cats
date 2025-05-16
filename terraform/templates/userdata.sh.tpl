@@ -1,36 +1,83 @@
 #!/bin/bash
 
-# Variables from Terraform template interpolation
 APP_HOME="/app"
 APP_PORT=${app_port}
-REPO_URL="https://github.com/YOUR_GITHUB_USER/YOUR_REPO.git"  # Replace this with your app repo URL
+REPO_URL="https://github.com/YOUR_GITHUB_USER/YOUR_REPO.git"
 BRANCH="main"
+USER="ubuntu"
 
-# Update packages and install dependencies
+# Update and install dependencies
 apt-get update -y
-apt-get install -y git curl build-essential libpq-dev
+apt-get install -y git curl build-essential libpq-dev ruby-full ruby-bundler
 
-# Install Ruby environment
-apt-get install -y ruby-full ruby-bundler
-
-# Create app directory
+# Setup app directory
 mkdir -p $APP_HOME
-cd $APP_HOME
+chown $USER:$USER $APP_HOME
 
-# Clone the app repo
-if [ ! -d "$APP_HOME/.git" ]; then
+# Clone or pull app repo as the app user
+sudo -u $USER bash <<EOF
+cd $APP_HOME
+if [ ! -d ".git" ]; then
   git clone --branch $BRANCH $REPO_URL .
 else
   git pull origin $BRANCH
 fi
 
-# Install bundler and gems
 gem install bundler
 bundle install --deployment --without development test
+EOF
 
-# Start Puma server (background process)
-bundle exec puma -C puma.rb &
+# Setup Puma systemd service
+cat <<EOL > /etc/systemd/system/puma.service
+[Unit]
+Description=Puma HTTP Server for Sinatra App
+After=network.target
 
-# Optionally, create a systemd service for Puma (better for managing process lifecycle)
-# systemctl enable puma.service
-# systemctl start puma.service
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$APP_HOME
+ExecStart=/usr/local/bin/bundle exec puma -C $APP_HOME/puma.rb
+Restart=always
+RestartSec=5
+Environment=RACK_ENV=production
+Environment=PORT=$APP_PORT
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Reload systemd and enable service
+systemctl daemon-reload
+systemctl enable puma.service
+systemctl start puma.service
+
+# Healthcheck function
+function healthcheck() {
+  for i in {1..10}; do
+    if curl -s http://localhost:$APP_PORT/ >/dev/null; then
+      echo "App is healthy."
+      return 0
+    else
+      echo "Waiting for app to be healthy... attempt $i"
+      sleep 5
+    fi
+  done
+  echo "App failed healthcheck."
+  return 1
+}
+
+healthcheck
+
+# Log rotation (optional, example)
+cat <<EOL > /etc/logrotate.d/puma
+$APP_HOME/log/*.log {
+  daily
+  missingok
+  rotate 14
+  compress
+  delaycompress
+  notifempty
+  copytruncate
+}
+EOL
