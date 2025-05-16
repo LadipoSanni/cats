@@ -1,0 +1,25 @@
+---
+- name: Blue/Green Deployment via CodeDeploy
+  hosts: localhost
+  tasks:
+    - name: Trigger CodeDeploy deployment
+      command: |
+        aws deploy create-deployment \
+        --application-name "{{ app_name }}" \
+        --deployment-group-name "{{ deploy_group_name }}" \
+        --deployment-config-name "{{ deployment_strategy }}" \
+        --s3-location bucket={{ s3_bucket }},bundleType=zip,key=deploy.zip
+
+    - name: Health Check
+      shell: /app/health_check.sh
+      register: health_check
+      ignore_errors: yes
+
+    - name: Log Health Check Result
+      debug:
+        msg: "Health check output: {{ health_check.stdout }}"
+
+    - name: Rollback on Failure
+      when: health_check.rc != 0
+      command: |
+        aws deploy stop-deployment --deployment-id {{ deployment_id }} --reason "Health check failed"
