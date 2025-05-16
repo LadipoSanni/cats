@@ -1,3 +1,10 @@
 app_port: 8000
 sleep_time_min: 1
 sleep_time_max: 10
+
+# Deployment settings
+app_name: "my-sinatra-app"
+deploy_group_name: "MyDeploymentGroup"
+deployment_strategy: "CodeDeployDefault.BlueGreen"
+s3_bucket: "my-app-deployments"
+elb_dns_name: "my-app-elb.amazonaws.com"
