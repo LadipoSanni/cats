@@ -1,0 +1,47 @@
+---
+- name: Install system dependencies
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop:
+    - build-essential
+    - curl
+    - ruby-full
+
+- name: Install Bundler gem
+  gem:
+    name: bundler
+    state: present
+    executable: /usr/bin/gem
+
+- name: Create application directory
+  file:
+    path: /app
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Copy application files to /app
+  synchronize:
+    src: "{{ playbook_dir }}/../../app/"
+    dest: /app/
+    recursive: yes
+    delete: yes
+
+- name: Copy start.sh template to /app/start.sh
+  template:
+    src: start.sh.j2
+    dest: /app/start.sh
+    mode: '0755'
+
+- name: Install application gems with bundler
+  command: bundle install --deployment --without development test
+  args:
+    chdir: /app
+
+- name: Start the Sinatra application with random startup delay
+  shell: /app/start.sh
+  async: 0
+  poll: 0
+  become_user: "{{ ansible_user }}"
