@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# URL to check (e.g., ELB endpoint or EC2 public IP)
+URL="http://{{ elb_dns_name }}:{{ app_port }}/health"
+
+echo "Checking application health at $URL..."
+response=$(curl -s -o /dev/null -w "%{http_code}" $URL)
+
+if [ "$response" -eq 200 ]; then
+  echo "Application is healthy."
+  exit 0
+else
+  echo "Application health check failed with status: $response"
+  exit 1
+fi
