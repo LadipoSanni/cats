@@ -1,0 +1,13 @@
+---
+- name: Stop current application version
+  ansible.builtin.shell: "pkill -f puma || true"
+
+- name: Deploy previous version
+  ansible.builtin.shell: |
+    cd /app/releases/previous
+    ./start.sh
+
+- name: Validate rollback deployment
+  shell: "curl -f http://{{ ansible_host }}:{{ app_port }}/health || exit 1"
+  retries: 3
+  delay: 10
