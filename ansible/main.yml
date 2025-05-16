@@ -1,0 +1,6 @@
+---
+- name: Deploy Sinatra App
+  hosts: app_servers
+  become: yes
+  roles:
+    - app
