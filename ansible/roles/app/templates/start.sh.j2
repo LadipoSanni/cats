@@ -1,0 +1,9 @@
+#!/bin/bash
+
+DELAY=$(( {{ sleep_time_min }} + RANDOM % ({{ sleep_time_max }} - {{ sleep_time_min }} + 1) ))
+echo "Starting application in $DELAY seconds..."
+sleep $DELAY
+
+# Start Puma server
+cd /app
+exec bundle exec puma -C puma.rb
