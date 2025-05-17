@@ -1,36 +1,59 @@
 ---
 - name: Install system dependencies
-  apt:
-    name: "{{ item }}"
-    state: present
-  with_items:
-    - build-essential
-    - curl
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
 
-- name: Install Ruby
-  apt:
-    name: ruby-full
-    state: present
+    - name: Install system dependencies
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - build-essential
+        - curl
+        - ruby-full
 
-- name: Install Bundler
-  command: gem install bundler
+    - name: Install Bundler
+      command: gem install bundler
 
-- name: Copy application files
-  copy:
-    src: "{{ playbook_dir }}/../"
-    dest: /app/
-    owner: ec2-user
-    group: ec2-user
-    mode: 0755
+- name: Deploy Sinatra Application
+  hosts: all
+  become: yes
+  tasks:
+    - name: Copy application files
+      copy:
+        src: "{{ playbook_dir }}/../"
+        dest: /app/
+        owner: ec2-user
+        group: ec2-user
+        mode: 0755
 
-- name: Copy start.sh template
-  template:
-    src: templates/start.sh.j2
-    dest: /app/start.sh
-    mode: 0755
+    - name: Copy start.sh template
+      template:
+        src: templates/start.sh.j2
+        dest: /app/start.sh
+        mode: 0755
+
+- name: Configure CloudWatch Agent
+  hosts: all
+  roles:
+    - app
+  tasks:
+    - import_tasks: tasks/cloudwatch-agent.yml
 
 - name: Install application dependencies
-  command: bundle install chdir=/app
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install application dependencies
+      command: bundle install chdir=/app
 
-- name: Start Application
-  shell: /app/start.sh
+- name: Start Sinatra Application
+  hosts: all
+  become: yes
+  tasks:
+    - name: Start Application
+      shell: /app/start.sh
